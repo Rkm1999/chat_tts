@@ -396,7 +396,7 @@ class TTSApp:
     def _init_engine_thread(self):
         try:
             models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
-            engine = TTSEngine(models_dir, verbose=False)
+            engine = TTSEngine(models_dir, onnx_provider="DML", verbose=False)
             stream = engine.create_stream()
             if stream is None:
                 self.ui_queue.put(("error", "Engine init failed — check model path."))
@@ -677,4 +677,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import multiprocessing
+    multiprocessing.freeze_support()  # required for PyInstaller + multiprocessing on Windows
     main()

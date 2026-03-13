@@ -30,12 +30,15 @@ binaries = llama_dlls + portaudio_dlls
 datas = (
     collect_data_files('tokenizers')
     + collect_data_files('onnxruntime')
+    + collect_data_files('soundfile')
     + [
         # _sounddevice_data helper module
         (
             os.path.join('..', '.venv', 'Lib', 'site-packages', '_sounddevice_data'),
             '_sounddevice_data',
         ),
+        # model weights — must sit next to the exe at runtime
+        ('models', 'models'),
     ]
 )
 
@@ -46,27 +49,61 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=[
+        # audio I/O
         'sounddevice',
         '_sounddevice',
+        'soundfile',
+        # tokenizer runtime
         'tokenizers',
         'tokenizers.implementations',
+        # ONNX runtime
         'onnxruntime',
+        # numpy internals
         'numpy',
         'numpy.core._multiarray_umath',
+        # tkinter
         'tkinter',
         'tkinter.ttk',
         'tkinter.messagebox',
+        # multiprocessing (needed for proxy.py child processes)
+        'multiprocessing',
+        'multiprocessing.spawn',
+        'multiprocessing.forkserver',
+        # top-level package
         'qwen3_tts_gguf',
         'qwen3_tts_gguf.inference',
+        # inference core modules
+        'qwen3_tts_gguf.inference.assets',
+        'qwen3_tts_gguf.inference.capturer',
+        'qwen3_tts_gguf.inference.config',
+        'qwen3_tts_gguf.inference.decoder',
+        'qwen3_tts_gguf.inference.encoder',
+        'qwen3_tts_gguf.inference.engine',
+        'qwen3_tts_gguf.inference.llama',
+        'qwen3_tts_gguf.inference.predictor',
+        'qwen3_tts_gguf.inference.prompt_builder',
+        'qwen3_tts_gguf.inference.proxy',
+        'qwen3_tts_gguf.inference.stream',
+        'qwen3_tts_gguf.inference.talker',
+        # schema sub-package
         'qwen3_tts_gguf.inference.schema',
         'qwen3_tts_gguf.inference.schema.constants',
+        'qwen3_tts_gguf.inference.schema.protocol',
+        'qwen3_tts_gguf.inference.schema.result',
+        # utils sub-package
         'qwen3_tts_gguf.inference.utils',
+        'qwen3_tts_gguf.inference.utils.audio',
+        'qwen3_tts_gguf.inference.utils.mel',
+        # workers sub-package
         'qwen3_tts_gguf.inference.workers',
+        'qwen3_tts_gguf.inference.workers.decoder',
+        'qwen3_tts_gguf.inference.workers.recorder',
+        'qwen3_tts_gguf.inference.workers.speaker',
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['matplotlib', 'scipy', 'pandas', 'PIL', 'cv2'],
+    excludes=['matplotlib', 'pandas', 'PIL', 'cv2'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

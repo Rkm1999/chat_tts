@@ -1,0 +1,7 @@
+numpy
+sounddevice
+soundfile
+scipy
+pyinstaller
+tokenizers
+onnxruntime-directml
