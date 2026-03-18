@@ -1,0 +1,13 @@
+{
+  "1330495200379932703": {
+    "speaker": "sohee",
+    "language": "korean",
+    "instruct": "Speak naturally, with excitement and energy.",
+    "volume": 1.0,
+    "max_chars": 400,
+    "user_speakers": {},
+    "user_instructs": {},
+    "user_references": {},
+    "server_reference": null
+  }
+}

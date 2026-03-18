@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tail -c 100000 \"C:\\\\git\\\\chat_tts\\\\final\\\\log\\\\latest.log\" | grep -E \"\\(Stream|clone|result|audio|speak\\)\" | grep -iv \"llama\" | tail -40)",
+      "WebSearch",
+      "Bash(find /c/git/chat_tts/final -type f -name \"*.py\" -path \"*/qwen3_tts_gguf/inference/*\" | xargs grep -l \"streaming\" | head -10)",
+      "Bash(tail -c 30000 \"C:\\\\git\\\\chat_tts\\\\final\\\\log\\\\latest.log\" 2>/dev/null | head -200)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(find /c/git/chat_tts -name \"*.py\" | xargs grep -l \"clone\\\\|anchor\\\\|reference\\\\|voice_ref\" 2>/dev/null | grep -v __pycache__ | grep -v .venv | head -20)",
+      "Bash(find /c/git/chat_tts/.venv -name \"*faster_qwen*\" -o -name \"*qwen*tts*\" 2>/dev/null | head -20)",
+      "Bash(ls -la /c/git/chat_tts/faster_qwen/*.py)",
+      "Bash(wc:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:dev.to)",
+      "Bash(python -c \"from qwen_tts import Qwen3TTSModel; help\\(Qwen3TTSModel\\)\")",
+      "Bash(python:*)",
+      "Bash(find . -name *.env* -type f)",
+      "Bash(grep -r \"generate_custom_voice\\\\|generate_voice_clone\" C:gitchat_ttsfaster_qwen --include=*.py)",
+      "Bash(grep -r \"sohee\\\\|speaker\" C:gitchat_ttsfaster_qwen --include=*.py)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:arxiv.org)",
+      "Bash(pip show:*)",
+      "Bash(find C:UsersryuAppDataLocalProgramsPythonPython311Libsite-packagesfaster_qwen3_tts -name *.py)"
+    ]
+  }
+}

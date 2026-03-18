@@ -5,3 +5,6 @@ scipy
 pyinstaller
 tokenizers
 onnxruntime-directml
+# Discord bot dependencies
+discord.py[voice]
+davey

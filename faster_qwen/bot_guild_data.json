@@ -1,0 +1,31 @@
+{
+  "1330495200379932703": {
+    "speaker": "sohee",
+    "language": "korean",
+    "instruct": "Speak naturally, with excitement and energy.",
+    "volume": 1.0,
+    "max_chars": 400,
+    "user_speakers": {
+      "577847412446593074": "ryan",
+      "393746939419820052": "eric",
+      "1326787900418818098": "dylan",
+      "1330169434047774722": "serena",
+      "974300229392269313": "vivian",
+      "1444785799030771834": "eric",
+      "286997807414509568": "ryan"
+    },
+    "user_instructs": {
+      "577847412446593074": "Speak in a very high-pitched, joyful, and blissfully happy voice",
+      "393746939419820052": "more clam down and bit slow",
+      "1330169434047774722": "Speak in a soft, sweet, and lovely female voice with a gentle tone",
+      "1326787900418818098": "A strong, intelligent, and authoritative leadership voice."
+    },
+    "user_references": {
+      "393746939419820052": "C:\\git\\chat_tts\\faster_qwen\\references\\1330495200379932703_393746939419820052.wav",
+      "1326787900418818098": "C:\\git\\chat_tts\\faster_qwen\\references\\1330495200379932703_1326787900418818098.wav",
+      "577847412446593074": "C:\\git\\chat_tts\\faster_qwen\\references\\1330495200379932703_577847412446593074.wav",
+      "286997807414509568": "C:\\git\\chat_tts\\faster_qwen\\references\\1330495200379932703_286997807414509568.wav"
+    },
+    "server_reference": null
+  }
+}
