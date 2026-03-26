@@ -5,6 +5,7 @@ Uses faster-qwen3-tts with CUDA graph capture for 4-10x speedup over GGUF/ONNX.
 Single process, two threads: main (UI) + synthesis.
 """
 import ctypes
+import gc
 import logging
 import os
 import subprocess
@@ -15,6 +16,7 @@ import threading
 import time
 import tkinter as tk
 from tkinter import messagebox, ttk
+from pathlib import Path
 import urllib.request
 import webbrowser
 import zipfile
@@ -41,6 +43,11 @@ DEFAULT_SPEAKER  = "sohee"
 DEFAULT_LANGUAGE = "Korean"
 
 DEFAULT_INSTRUCT = "Speak naturally and expressively, with clear emotion and a warm tone."
+
+GPU_MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+REF_MODEL_NAME = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+ANCHOR_TEXT    = "안녕하세요, 읽어주는 별코코입니다. 오늘도 좋은 하루 되세요."
+REFERENCES_DIR = Path(__file__).parent / "references"
 
 TTS_SR = 24000  # faster-qwen3-tts output sample rate
 
@@ -108,6 +115,11 @@ class TTSApp:
         self._meta_tag_counter = 0
         self._speak_queue: queue.Queue = queue.Queue()  # (text, speaker, language, tag)
 
+        self._reference_path: str | None = None
+        self._ref_speaker:    str | None = None
+        self._ref_language:   str | None = None
+        self._ref_instruct:   str | None = None
+
         # Speaker output — ring buffer drained by OutputStream callback
         self._spk_buf      = np.zeros(0, dtype=np.float32)
         self._spk_buf_lock = threading.Lock()
@@ -151,6 +163,7 @@ class TTSApp:
         self.lang_cb  = ttk.Combobox(top, textvariable=self.lang_var,
                                       values=LANGUAGES, state="readonly", width=15)
         self.lang_cb.pack(side="left", padx=(4, 0))
+        self.lang_cb.bind("<<ComboboxSelected>>", self._on_language_change)
 
         ttk.Separator(top, orient="vertical").pack(side="left", fill="y", padx=(10, 10))
         ttk.Label(top, text="Spk Out:").pack(side="left")
@@ -209,12 +222,15 @@ class TTSApp:
         self.instruct_entry = ttk.Entry(prompt_frame, textvariable=self.instruct_var,
                                         font=("Segoe UI", 9))
         self.instruct_entry.grid(row=0, column=1, sticky="ew")
-        self.tone_test_btn = ttk.Button(prompt_frame, text="Test", width=5,
+        self.tone_test_btn = ttk.Button(prompt_frame, text="Test", width=7,
                                         command=self._on_tone_test)
         self.tone_test_btn.grid(row=0, column=2, padx=(6, 0))
+        self.tone_regen_btn = ttk.Button(prompt_frame, text="Regenerate", width=10,
+                                         command=self._on_tone_regen)
+        self.tone_regen_btn.grid(row=0, column=3, padx=(4, 0))
         self.tone_reset_btn = ttk.Button(prompt_frame, text="Reset", width=5,
                                          command=self._on_tone_reset)
-        self.tone_reset_btn.grid(row=0, column=3, padx=(4, 0))
+        self.tone_reset_btn.grid(row=0, column=4, padx=(4, 0))
 
         # ── Chat log ──────────────────────────────────────────────────────────
         log_frame = ttk.Frame(self.root)
@@ -473,27 +489,72 @@ class TTSApp:
         self._set_input_state("disabled")
         threading.Thread(target=self._init_engine_thread, daemon=True).start()
 
+    def _generate_reference_blocking(self, speaker, language, instruct):
+        """Swap GPU models: unload Base → load CustomVoice → generate WAV → unload → reload Base."""
+        import soundfile as sf
+        from qwen_tts import Qwen3TTSModel
+
+        REFERENCES_DIR.mkdir(exist_ok=True)
+        ref_path = REFERENCES_DIR / "gui_reference.wav"
+
+        if self.model is not None:
+            del self.model
+            self.model = None
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        ref_model = None
+        try:
+            ref_model = Qwen3TTSModel.from_pretrained(
+                REF_MODEL_NAME, device_map="cuda", torch_dtype=torch.bfloat16)
+            wavs, sr = ref_model.generate_custom_voice(
+                text=ANCHOR_TEXT, speaker=speaker, language=language,
+                instruct=instruct or None)
+            if wavs:
+                sf.write(str(ref_path), wavs[0].astype("float32"), sr)
+                return str(ref_path)
+            return None
+        except Exception as exc:
+            self.ui_queue.put(("system", f"Reference generation failed: {exc}"))
+            return None
+        finally:
+            if ref_model is not None:
+                del ref_model
+            gc.collect()
+            torch.cuda.empty_cache()
+            try:
+                self.model = FasterQwen3TTS.from_pretrained(
+                    GPU_MODEL_NAME, device="cuda", dtype=torch.bfloat16)
+            except Exception as exc:
+                self.ui_queue.put(("error", f"Failed to reload Base model: {exc}"))
+
     def _init_engine_thread(self):
         try:
-            self.ui_queue.put(("system", "Loading faster-qwen3-tts model…"))
-            model = FasterQwen3TTS.from_pretrained(
-                "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
-                device="cuda",
-                dtype=torch.bfloat16,
-            )
-            self.model = model
-            self.ui_queue.put(("system", f"Initializing {DEFAULT_SPEAKER.title()} voice…"))
-            self._warmup(DEFAULT_SPEAKER, DEFAULT_LANGUAGE)
+            self.ui_queue.put(("system", "Generating voice reference…"))
+            instruct = self.instruct_var.get().strip() or None
+            ref_path = self._generate_reference_blocking(DEFAULT_SPEAKER, DEFAULT_LANGUAGE, instruct)
+            if ref_path is None:
+                self.ui_queue.put(("error", "Failed to generate voice reference."))
+                return
+            self._reference_path = ref_path
+            self._ref_speaker    = DEFAULT_SPEAKER
+            self._ref_language   = DEFAULT_LANGUAGE
+            self._ref_instruct   = instruct
+
+            self.ui_queue.put(("system", f"Warming up {DEFAULT_SPEAKER.title()} voice…"))
+            self._warmup(DEFAULT_SPEAKER, DEFAULT_LANGUAGE, ref_path)
         except Exception as exc:
             self.ui_queue.put(("error", f"Engine error: {exc}"))
 
-    def _warmup(self, speaker: str, language: str):
+    def _warmup(self, speaker: str, language: str, reference_path: str):
         """Run a short synthesis to capture CUDA graphs; opens the speaker stream."""
         try:
             init_text = INIT_PHRASES.get(language, "Hello.")
             first_sr = None
-            for audio_chunk, sr, _timing in self.model.generate_custom_voice_streaming(
-                text=init_text, speaker=speaker, language=language, chunk_size=4,
+            for audio_chunk, sr, _timing in self.model.generate_voice_clone_streaming(
+                text=init_text, language=language,
+                ref_audio=reference_path, ref_text=ANCHOR_TEXT,
+                chunk_size=4, xvec_only=False,
             ):
                 audio_chunk = _to_float32(audio_chunk)
                 if first_sr is None:
@@ -546,19 +607,21 @@ class TTSApp:
     def _speak_thread(self, text: str, speaker: str, language: str, tag: str):
         duration = None
         try:
-            instruct = self.instruct_var.get().strip() or None
+            ref_path = self._reference_path
+            if not ref_path:
+                self.ui_queue.put(("system", "No voice reference — skipping."))
+                self.ui_queue.put(("finalize_meta", (tag, speaker, language, None)))
+                return
+
             print(f"[TTS] Speaking: '{text}'")
             t0 = time.monotonic()
             total_samples = 0
             first_sr = None
 
-            gen_kwargs = dict(
-                text=text, speaker=speaker, language=language, chunk_size=4)
-            if instruct:
-                gen_kwargs["instruct"] = instruct
-
-            for audio_chunk, sr, _timing in self.model.generate_custom_voice_streaming(
-                **gen_kwargs
+            for audio_chunk, sr, _timing in self.model.generate_voice_clone_streaming(
+                text=text, language=language,
+                ref_audio=ref_path, ref_text=ANCHOR_TEXT,
+                chunk_size=4, xvec_only=False,
             ):
                 if self._stop_event.is_set():
                     break
@@ -603,32 +666,43 @@ class TTSApp:
             self.ui_queue.put(("enable_input", None))
 
     def _on_tone_test(self):
+        if self._previewing or not self._voice_ready or not self._reference_path:
+            return
+        self._previewing = True
+        self._status("Playing reference audio…")
+        threading.Thread(target=self._tone_test_thread, daemon=True).start()
+
+    def _tone_test_thread(self):
+        try:
+            import soundfile as sf
+            audio, sr = sf.read(self._reference_path, dtype="float32")
+            if audio.ndim > 1:
+                audio = audio[:, 0]
+            if sr != TTS_SR:
+                orig_len = len(audio)
+                target_len = int(orig_len * TTS_SR / sr)
+                audio = np.interp(
+                    np.linspace(0, orig_len - 1, target_len),
+                    np.arange(orig_len), audio).astype(np.float32)
+            self._push_spk(audio)
+            if self._mic_device_id is not None and self._mic_out_stream is not None:
+                self._on_mic_chunk(audio, TTS_SR)
+        except Exception as exc:
+            self.ui_queue.put(("system", f"Reference playback error: {exc}"))
+        finally:
+            self._previewing = False
+            self.ui_queue.put(("status", "Ready"))
+
+    def _on_tone_regen(self):
         if self.synthesizing or self._previewing or not self._voice_ready:
             return
         speaker  = self.voice_var.get()
         language = self.lang_var.get()
-        text     = INIT_PHRASES.get(language, "Hello.")
+        instruct = self.instruct_var.get().strip() or None
         self._previewing = True
-        self._status(f"Testing tone for {speaker.title()}…")
-        threading.Thread(target=self._tone_test_thread, args=(speaker, language, text),
-                         daemon=True).start()
-
-    def _tone_test_thread(self, speaker: str, language: str, text: str):
-        try:
-            instruct = self.instruct_var.get().strip() or None
-            gen_kwargs = dict(
-                text=text, speaker=speaker, language=language, chunk_size=4)
-            if instruct:
-                gen_kwargs["instruct"] = instruct
-            for audio_chunk, sr, _timing in self.model.generate_custom_voice_streaming(
-                **gen_kwargs
-            ):
-                self._push_spk(_to_float32(audio_chunk))
-        except Exception as exc:
-            self.ui_queue.put(("system", f"Tone test error: {exc}"))
-        finally:
-            self._previewing = False
-            self.ui_queue.put(("system", "Tone test done."))
+        self._status(f"Regenerating reference for {speaker.title()}…")
+        threading.Thread(target=self._voice_change_thread,
+                         args=(speaker, language, instruct), daemon=True).start()
 
     def _on_tone_reset(self):
         self.instruct_var.set(DEFAULT_INSTRUCT)
@@ -638,26 +712,49 @@ class TTSApp:
             return
         speaker  = self.voice_var.get()
         language = self.lang_var.get()
+        instruct = self.instruct_var.get().strip() or None
         self._previewing = True
-        self._status(f"Previewing {speaker.title()}…")
-        threading.Thread(
-            target=self._preview_thread,
-            args=(speaker, language),
-            daemon=True,
-        ).start()
+        threading.Thread(target=self._voice_change_thread,
+                         args=(speaker, language, instruct), daemon=True).start()
 
-    def _preview_thread(self, speaker: str, language: str):
+    def _on_language_change(self, _event=None):
+        if self.synthesizing or self._previewing or not self._voice_ready:
+            return
+        speaker  = self.voice_var.get()
+        language = self.lang_var.get()
+        instruct = self.instruct_var.get().strip() or None
+        self._previewing = True
+        threading.Thread(target=self._voice_change_thread,
+                         args=(speaker, language, instruct), daemon=True).start()
+
+    def _voice_change_thread(self, speaker: str, language: str, instruct: str | None):
         try:
+            self.ui_queue.put(("status", f"Generating reference for {speaker.title()}…"))
+            ref_path = self._generate_reference_blocking(speaker, language, instruct)
+            if ref_path is None:
+                self.ui_queue.put(("system", f"Reference generation failed for {speaker}."))
+                return
+            self._reference_path = ref_path
+            self._ref_speaker    = speaker
+            self._ref_language   = language
+            self._ref_instruct   = instruct
+
+            self.ui_queue.put(("status", f"Testing {speaker.title()} voice…"))
             init_text = INIT_PHRASES.get(language, "Hello.")
-            for audio_chunk, sr, _timing in self.model.generate_custom_voice_streaming(
-                text=init_text, speaker=speaker, language=language, chunk_size=4,
+            for audio_chunk, sr, _timing in self.model.generate_voice_clone_streaming(
+                text=init_text, language=language,
+                ref_audio=ref_path, ref_text=ANCHOR_TEXT,
+                chunk_size=4, xvec_only=False,
             ):
-                self._push_spk(_to_float32(audio_chunk))
+                audio = _to_float32(audio_chunk)
+                self._push_spk(audio)
+                if self._mic_device_id is not None and self._mic_out_stream is not None:
+                    self._on_mic_chunk(audio, sr)
         except Exception as exc:
-            self.ui_queue.put(("system", f"Preview error: {exc}"))
+            self.ui_queue.put(("system", f"Voice change error: {exc}"))
         finally:
             self._previewing = False
-            self.ui_queue.put(("system", f"Preview done — {speaker.title()} / {language}"))
+            self.ui_queue.put(("ready", f"Ready — {speaker.title()} / {language}"))
 
     def _on_stop(self):
         self._stop_event.set()
@@ -734,7 +831,8 @@ class TTSApp:
         # These controls are independent of synthesis — only disabled during init
         for w in (self.stop_btn, self.voice_cb, self.lang_cb,
                   self.spk_out_cb, self.mic_cb, self.mic_refresh_btn,
-                  self.tone_test_btn, self.tone_reset_btn, self.instruct_entry):
+                  self.tone_test_btn, self.tone_regen_btn, self.tone_reset_btn,
+                  self.instruct_entry):
             w.config(state=state)
 
     # ── VB-Audio Virtual Cable install ────────────────────────────────────────

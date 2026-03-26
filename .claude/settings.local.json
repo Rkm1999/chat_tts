@@ -21,7 +21,19 @@
       "WebFetch(domain:pypi.org)",
       "WebFetch(domain:arxiv.org)",
       "Bash(pip show:*)",
-      "Bash(find C:UsersryuAppDataLocalProgramsPythonPython311Libsite-packagesfaster_qwen3_tts -name *.py)"
+      "Bash(find C:UsersryuAppDataLocalProgramsPythonPython311Libsite-packagesfaster_qwen3_tts -name *.py)",
+      "Bash(git push:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(pip freeze:*)",
+      "WebFetch(domain:qwen.alibabacloud.com)",
+      "Bash(xargs grep:*)",
+      "WebFetch(domain:www.alibabacloud.com)",
+      "Bash(gh api:*)",
+      "Bash(gh issue:*)",
+      "WebFetch(domain:docs.pytorch.org)",
+      "WebFetch(domain:docs.vllm.ai)"
     ]
   }
 }

@@ -1,10 +1,25 @@
-numpy
-sounddevice
-soundfile
-scipy
-pyinstaller
-tokenizers
+# Python 3.11.9
+
+# Core audio / ML
+numpy>=1.26.0
+scipy==1.15.3
+sounddevice==0.5.1
+soundfile==0.12.1
+tokenizers==0.22.2
 onnxruntime-directml
-# Discord bot dependencies
+
+# TTS
+faster-qwen3-tts==0.2.4
+qwen-tts
+
+# PyTorch (install manually with CUDA support — versions must match):
+#   python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+torch
+torchaudio
+
+# Discord bot
 discord.py[voice]
-davey
+python-dotenv==1.1.0
+
+# GUI / build
+pyinstaller==6.11.0

@@ -23,6 +23,103 @@ INIT_PHRASES = {
     "Portuguese": "Olá, prazer em conhecê-lo.",
 }
 
+# ── Hallucination / noise guard ───────────────────────────────────────────────
+
+# Natural speech rates (chars/second) by language.
+# CJK: ~1 char per syllable. Latin/Cyrillic: avg word ~5 chars at ~2.5 words/sec.
+_CHARS_PER_SEC: dict[str, float] = {
+    "Korean":     6.0,
+    "Japanese":   6.0,
+    "Chinese":    7.0,
+    "English":    13.0,
+    "German":     10.0,
+    "French":     11.0,
+    "Spanish":    14.0,
+    "Italian":    13.0,
+    "Portuguese": 12.0,
+    "Russian":    13.0,
+}
+_DEFAULT_CHARS_PER_SEC  = 10.0  # fallback for unlisted languages
+_DURATION_FLOOR_SEC     = 4.0   # minimum: even 1-word messages must allow 4 s
+_DURATION_MULTIPLIER    = 3.0   # 3× natural rate covers slowest expressive delivery
+
+_FLATNESS_THRESHOLD     = 0.65  # spectral flatness above this → noise (speech: 0.2–0.5, noise: 0.7–1.0)
+_FLATNESS_MARGIN        = 0.25  # how much above ref flatness before calling it noise
+_FLATNESS_CHECK_AFTER   = 1.5   # seconds of audio to accumulate before first flatness check
+_FLATNESS_ENERGY_GATE   = 0.01  # skip flatness on near-silent chunks (RMS below this)
+
+
+def _estimate_max_duration(text: str, language: str, ref_chars_per_sec: float | None = None) -> float:
+    """Upper-bound audio duration for the given text (seconds).
+
+    Uses ref_chars_per_sec (derived from reference WAV) when available,
+    falling back to the language table. This accounts for tone prompts
+    that change speaking speed.
+    """
+    rate = ref_chars_per_sec if ref_chars_per_sec is not None else _CHARS_PER_SEC.get(language, _DEFAULT_CHARS_PER_SEC)
+    return max(_DURATION_FLOOR_SEC, len(text) / rate * _DURATION_MULTIPLIER)
+
+
+def _spectral_flatness(audio: np.ndarray) -> float:
+    """Wiener entropy of an audio chunk.
+
+    Returns value in [0, 1]:
+      ~0.2–0.5  real speech (harmonic structure, concentrated energy)
+      ~0.7–1.0  noise / hallucination (flat, spread spectrum)
+
+    Only numpy is required.
+    """
+    spectrum = np.abs(np.fft.rfft(audio))
+    spectrum = np.maximum(spectrum, 1e-10)  # guard against log(0)
+    geometric_mean = np.exp(np.mean(np.log(spectrum)))
+    arithmetic_mean = np.mean(spectrum)
+    return float(geometric_mean / arithmetic_mean)
+
+
+# Reference audio stats cache: path → (chars_per_sec, spectral_flatness)
+_ref_stats_cache: dict[str, tuple[float, float]] = {}
+
+
+def _get_ref_audio_stats(ref_path: str) -> tuple[float, float] | None:
+    """Read reference WAV and return (chars_per_sec, spectral_flatness).
+
+    chars_per_sec is derived from ANCHOR_TEXT length / ref audio duration,
+    calibrated to the actual speaking speed of this voice + tone.
+    spectral_flatness is the Wiener entropy of the reference, defining
+    what 'real speech' looks like for this cloned voice.
+
+    Returns None if the file cannot be read.
+    Cached by path; invalidate with invalidate_ref_stats_cache().
+    """
+    if ref_path in _ref_stats_cache:
+        return _ref_stats_cache[ref_path]
+
+    try:
+        import scipy.io.wavfile
+        sr, data = scipy.io.wavfile.read(ref_path)
+        if data.ndim > 1:
+            data = data[:, 0]
+        audio = data.astype(np.float32)
+        if np.issubdtype(data.dtype, np.integer):
+            audio = audio / np.iinfo(data.dtype).max
+
+        duration = len(audio) / sr
+        chars_per_sec = len(ANCHOR_TEXT) / duration if duration > 0 else _DEFAULT_CHARS_PER_SEC
+        flatness = _spectral_flatness(audio)
+
+        result = (chars_per_sec, flatness)
+        _ref_stats_cache[ref_path] = result
+        return result
+    except Exception as exc:
+        print(f"[Noise Guard] Could not read reference stats from {ref_path!r}: {exc}")
+        return None
+
+
+def invalidate_ref_stats_cache(path) -> None:
+    """Remove stale stats cache entry when a reference WAV is replaced."""
+    _ref_stats_cache.pop(str(path), None)
+
+
 _QUEUE_EMPTY = object()  # sentinel distinguishing "empty queue" from None poison pill
 
 
@@ -70,6 +167,17 @@ def _synthesize_blocking(model, source, text: str, language: str,
     t0 = time.monotonic()
     first_sr = None
     total_samples = 0
+    ref_stats      = _get_ref_audio_stats(reference)
+    ref_cps        = ref_stats[0] if ref_stats else None
+    ref_flat       = ref_stats[1] if ref_stats else None
+    max_duration   = _estimate_max_duration(text, language, ref_cps)
+    flat_threshold = min(ref_flat + _FLATNESS_MARGIN, _FLATNESS_THRESHOLD) if ref_flat is not None else _FLATNESS_THRESHOLD
+    flatness_values: list[float] = []
+    halted_by_noise = False
+    print(f"[TTS Worker {guild_id}] Max duration: {max_duration:.1f}s "
+          f"(ref_cps={f'{ref_cps:.1f}' if ref_cps is not None else 'n/a'}, "
+          f"flat_thresh={flat_threshold:.3f}) "
+          f"for {len(text)} chars ({language})")
 
     iterator = model.generate_voice_clone_streaming(
         text=text, language=language,
@@ -89,10 +197,39 @@ def _synthesize_blocking(model, source, text: str, language: str,
             print(f"[TTS Worker {guild_id}] First chunk in {elapsed:.3f}s  ({len(audio)/sr*1000:.0f}ms audio)")
         source.feed(audio)
         total_samples += len(audio)
+        current_duration = total_samples / sr
+
+        # ── Duration guard ──────────────────────────────────────────────────
+        if current_duration > max_duration:
+            print(
+                f"[TTS Worker {guild_id}] NOISE ABORT (duration) — "
+                f"{current_duration:.1f}s > {max_duration:.1f}s limit "
+                f"for {len(text)}-char {language} input"
+            )
+            halted_by_noise = True
+            break
+
+        # ── Spectral flatness guard ─────────────────────────────────────────
+        rms = float(np.sqrt(np.mean(audio ** 2)))
+        if rms > _FLATNESS_ENERGY_GATE:
+            flatness_values.append(_spectral_flatness(audio))
+
+        if current_duration >= _FLATNESS_CHECK_AFTER and flatness_values:
+            avg_flatness = float(np.mean(flatness_values))
+            if avg_flatness > flat_threshold:
+                print(
+                    f"[TTS Worker {guild_id}] NOISE ABORT (spectral flatness={avg_flatness:.3f}) — "
+                    f"after {current_duration:.1f}s of {len(text)}-char {language} input"
+                )
+                halted_by_noise = True
+                break
 
     elapsed = time.monotonic() - t0
     duration = total_samples / first_sr if first_sr else 0.0
-    print(f"[TTS Worker {guild_id}] Done — {duration:.1f}s audio in {elapsed:.2f}s")
+    if halted_by_noise:
+        print(f"[TTS Worker {guild_id}] Aborted (noise guard) — {duration:.1f}s audio in {elapsed:.2f}s")
+    else:
+        print(f"[TTS Worker {guild_id}] Done — {duration:.1f}s audio in {elapsed:.2f}s")
 
 
 async def guild_tts_worker(state, model, config, default_reference: Optional[str] = None) -> None:

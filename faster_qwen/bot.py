@@ -10,6 +10,7 @@ Requires a .env file in the same directory with at minimum:
 import asyncio
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Optional
@@ -22,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from bot_config import load_config, BotConfig
 from bot_guild import GuildSettings, GuildState, GuildStateManager
-from bot_tts_worker import TTSRequest, guild_tts_worker, _to_float32, ANCHOR_TEXT
+from bot_tts_worker import TTSRequest, guild_tts_worker, _to_float32, ANCHOR_TEXT, invalidate_ref_stats_cache
 
 # ── Speaker / Language constants ─────────────────────────────────────────────
 
@@ -295,6 +296,7 @@ def _invalidate_voice_cache(path: Path):
         stale = [k for k in model._voice_prompt_cache if k[0] == path_str]
         for k in stale:
             del model._voice_prompt_cache[k]
+    invalidate_ref_stats_cache(path)
         if stale:
             print(f"[Cache] Invalidated {len(stale)} stale voice cache entry(ies) for {path_str}")
 
@@ -355,6 +357,63 @@ class AnchorApprovalView(discord.ui.View):
 
     async def on_timeout(self):
         pass  # Reference stays cleared; user must re-run /내목소리
+
+
+class ToneApprovalView(discord.ui.View):
+    """Approval view for /말투 — lets the user hear the new reference before committing the instruct."""
+    def __init__(self, guild_id: int, user_id: int, final_wav_path: Path, temp_wav_path: Path,
+                 speaker: str, instruct: Optional[str]):
+        super().__init__(timeout=300)
+        self.guild_id       = guild_id
+        self.user_id        = user_id
+        self.final_wav_path = final_wav_path
+        self.temp_wav_path  = temp_wav_path
+        self.speaker        = speaker
+        self.instruct       = instruct  # None means reset
+
+    @discord.ui.button(label="Approve", style=discord.ButtonStyle.green)
+    async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        state = guild_manager.get_or_create(self.guild_id)
+        uid = str(self.user_id)
+        if self.instruct is None:
+            state.settings.user_instructs.pop(uid, None)
+        else:
+            state.settings.user_instructs[uid] = self.instruct
+        shutil.move(str(self.temp_wav_path), str(self.final_wav_path))
+        state.settings.user_references[uid] = str(self.final_wav_path)
+        _invalidate_voice_cache(self.final_wav_path)
+        guild_manager.save(self.guild_id)
+        self.stop()
+        if self.instruct is None:
+            await interaction.response.edit_message(content="Tone reset and voice reference updated!", view=None)
+        else:
+            await interaction.response.edit_message(
+                content=f"Tone set and voice reference updated: *{self.instruct}*", view=None
+            )
+
+    @discord.ui.button(label="Regenerate", style=discord.ButtonStyle.blurple)
+    async def regenerate(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.edit_message(content="Generating a new sample...", view=None)
+        self.stop()
+        loop = asyncio.get_event_loop()
+        language = guild_manager.get_or_create(self.guild_id).settings.language
+        await loop.run_in_executor(
+            None, _generate_anchor_wav, cpu_model, self.speaker, language, self.temp_wav_path, self.instruct
+        )
+        view = ToneApprovalView(
+            self.guild_id, self.user_id, self.final_wav_path, self.temp_wav_path, self.speaker, self.instruct
+        )
+        await interaction.followup.send(
+            "Here's a new sample — does this sound good?",
+            file=discord.File(str(self.temp_wav_path), filename="voice_preview.wav"),
+            view=view,
+        )
+
+    async def on_timeout(self):
+        try:
+            self.temp_wav_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 class ServerAnchorApprovalView(discord.ui.View):
@@ -463,32 +522,62 @@ class TTS(app_commands.Group, name="별코코", description="TTS 음성 컨트�
         has_reference = uid in state.settings.user_references
 
         if instruct is None:
-            state.settings.user_instructs.pop(uid, None)
-            guild_manager.save(interaction.guild_id)
             if speaker and has_reference:
+                # Generate preview with no instruct; only commit on approval
                 await interaction.response.defer(ephemeral=True)
                 loop = asyncio.get_event_loop()
-                wav_path = Path(state.settings.user_references[uid])
-                await loop.run_in_executor(
-                    None, _generate_anchor_wav, cpu_model, speaker, state.settings.language, wav_path, None
-                )
-                _invalidate_voice_cache(wav_path)
-                await interaction.followup.send("Your personal tone reset and voice reference updated.", ephemeral=True)
+                final_wav = Path(state.settings.user_references[uid])
+                temp_wav  = final_wav.with_suffix(".pending.wav")
+                try:
+                    await loop.run_in_executor(
+                        None, _generate_anchor_wav, cpu_model, speaker, state.settings.language, temp_wav, None
+                    )
+                except Exception as e:
+                    await interaction.followup.send(f"Failed to generate voice sample: {e}", ephemeral=True)
+                    return
+                view = ToneApprovalView(interaction.guild_id, int(uid), final_wav, temp_wav, speaker, None)
+                try:
+                    await interaction.user.send(
+                        "Here's a preview with your tone reset. Approve to apply it.",
+                        file=discord.File(str(temp_wav), filename="voice_preview.wav"),
+                        view=view,
+                    )
+                    await interaction.followup.send("Check your DMs for a preview!", ephemeral=True)
+                except discord.Forbidden:
+                    temp_wav.unlink(missing_ok=True)
+                    await interaction.followup.send("Couldn't DM you (DMs disabled). No changes made.", ephemeral=True)
             else:
+                state.settings.user_instructs.pop(uid, None)
+                guild_manager.save(interaction.guild_id)
                 await interaction.response.send_message("Your personal tone reset to server default.", ephemeral=True)
         else:
-            state.settings.user_instructs[uid] = instruct
-            guild_manager.save(interaction.guild_id)
             if speaker and has_reference:
+                # Generate preview with new instruct; only commit on approval
                 await interaction.response.defer(ephemeral=True)
                 loop = asyncio.get_event_loop()
-                wav_path = Path(state.settings.user_references[uid])
-                await loop.run_in_executor(
-                    None, _generate_anchor_wav, cpu_model, speaker, state.settings.language, wav_path, instruct
-                )
-                _invalidate_voice_cache(wav_path)
-                await interaction.followup.send(f"Your personal tone set and voice reference updated: *{instruct}*", ephemeral=True)
+                final_wav = Path(state.settings.user_references[uid])
+                temp_wav  = final_wav.with_suffix(".pending.wav")
+                try:
+                    await loop.run_in_executor(
+                        None, _generate_anchor_wav, cpu_model, speaker, state.settings.language, temp_wav, instruct
+                    )
+                except Exception as e:
+                    await interaction.followup.send(f"Failed to generate voice sample: {e}", ephemeral=True)
+                    return
+                view = ToneApprovalView(interaction.guild_id, int(uid), final_wav, temp_wav, speaker, instruct)
+                try:
+                    await interaction.user.send(
+                        f"Here's a preview with tone: *{instruct}*. Approve to apply it.",
+                        file=discord.File(str(temp_wav), filename="voice_preview.wav"),
+                        view=view,
+                    )
+                    await interaction.followup.send("Check your DMs for a preview!", ephemeral=True)
+                except discord.Forbidden:
+                    temp_wav.unlink(missing_ok=True)
+                    await interaction.followup.send("Couldn't DM you (DMs disabled). No changes made.", ephemeral=True)
             else:
+                state.settings.user_instructs[uid] = instruct
+                guild_manager.save(interaction.guild_id)
                 note = "" if speaker else " (Set a speaker with `/별코코 내목소리` for it to take effect on your voice)"
                 await interaction.response.send_message(f"Your personal tone set to: *{instruct}*{note}", ephemeral=True)
 
