@@ -1,4 +1,5 @@
 # Python 3.11.9
+# GPU: RTX 30xx (Ampere, sm86) — CUDA 12.4
 
 # Core audio / ML
 numpy>=1.26.0
@@ -9,13 +10,19 @@ tokenizers==0.22.2
 onnxruntime-directml
 
 # TTS
-faster-qwen3-tts==0.2.4
-qwen-tts
+faster-qwen3-tts==0.2.5
+qwen-tts==0.1.1
+qwen3-tts-triton==0.1.0
 
-# PyTorch (install manually with CUDA support — versions must match):
-#   python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-torch
-torchaudio
+# Triton for Windows (drop-in replacement for linux triton; same `import triton` API)
+# RTX 30xx + PyTorch 2.6 (cu124) → triton-windows 3.2.x
+# Version table: PyTorch 2.6 → Triton 3.2 | PyTorch 2.7+ → Triton 3.3+ | PyTorch 2.10 → Triton 3.6
+triton-windows==3.2.0.post21
+
+# PyTorch — must be installed separately with CUDA support:
+#   pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+torchaudio==2.6.0
 
 # Discord bot
 discord.py[voice]

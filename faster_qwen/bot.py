@@ -25,6 +25,8 @@ from bot_config import load_config, BotConfig
 from bot_guild import GuildSettings, GuildState, GuildStateManager
 from bot_tts_worker import TTSRequest, guild_tts_worker, _to_float32, ANCHOR_TEXT, invalidate_ref_stats_cache
 
+HYBRID_MODE = True  # Set False to disable Triton kernel patching (qwen3-tts-triton)
+
 # ── Speaker / Language constants ─────────────────────────────────────────────
 
 REFERENCES_DIR = Path(__file__).parent / "references"
@@ -135,7 +137,16 @@ async def _stop_guild_worker(state: GuildState):
 def _load_gpu_engine(model_name: str):
     import torch
     from faster_qwen3_tts import FasterQwen3TTS
-    return FasterQwen3TTS.from_pretrained(model_name, device="cuda", dtype=torch.bfloat16)
+    model = FasterQwen3TTS.from_pretrained(model_name, device="cuda", dtype=torch.bfloat16)
+    if HYBRID_MODE:
+        try:
+            from qwen3_tts_triton.models.patching import find_patchable_model, apply_triton_kernels
+            internal = find_patchable_model(model.model)
+            apply_triton_kernels(internal)
+            print("[Bot] Triton kernels applied — hybrid mode active")
+        except Exception as e:
+            print(f"[Bot] Triton patching skipped: {e}")
+    return model
 
 
 def _load_cpu_engine(model_name: str):

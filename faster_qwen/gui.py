@@ -51,6 +51,8 @@ REFERENCES_DIR = Path(__file__).parent / "references"
 
 TTS_SR = 24000  # faster-qwen3-tts output sample rate
 
+HYBRID_MODE = True  # Set False to disable Triton kernel patching (qwen3-tts-triton)
+
 INIT_PHRASES = {
     "Korean":     "안녕하세요, 반갑습니다.",
     "English":    "Hello, nice to meet you.",
@@ -212,6 +214,7 @@ class TTSApp:
                   command=self._on_mic_vol).pack(side="left")
         self.mic_vol_lbl = ttk.Label(vol, text="100%", width=5)
         self.mic_vol_lbl.pack(side="left")
+
 
         # ── Tone prompt row ───────────────────────────────────────────────────
         prompt_frame = ttk.Frame(self.root)
@@ -525,6 +528,14 @@ class TTSApp:
             try:
                 self.model = FasterQwen3TTS.from_pretrained(
                     GPU_MODEL_NAME, device="cuda", dtype=torch.bfloat16)
+                if HYBRID_MODE:
+                    try:
+                        from qwen3_tts_triton.models.patching import find_patchable_model, apply_triton_kernels
+                        internal = find_patchable_model(self.model.model)
+                        apply_triton_kernels(internal)
+                        print("[GUI] Triton kernels applied — hybrid mode active")
+                    except Exception as triton_exc:
+                        print(f"[GUI] Triton patching skipped: {triton_exc}")
             except Exception as exc:
                 self.ui_queue.put(("error", f"Failed to reload Base model: {exc}"))
 
@@ -638,7 +649,8 @@ class TTSApp:
             if first_sr and total_samples > 0:
                 duration = total_samples / first_sr
             elapsed = time.monotonic() - t0
-            print(f"[TTS] Done — {total_samples} samples in {elapsed:.2f}s")
+            dur_str = f"{duration:.2f}s audio" if duration is not None else "no audio"
+            print(f"[TTS] Done — {dur_str} in {elapsed:.2f}s")
 
             self.ui_queue.put(("finalize_meta", (tag, speaker, language, duration)))
         except Exception as exc:

@@ -33,7 +33,10 @@
       "Bash(gh api:*)",
       "Bash(gh issue:*)",
       "WebFetch(domain:docs.pytorch.org)",
-      "WebFetch(domain:docs.vllm.ai)"
+      "WebFetch(domain:docs.vllm.ai)",
+      "Bash(grep -v \"^.venv$\")",
+      "Bash(grep:*)",
+      "Bash(.venv/Scripts/pip show:*)"
     ]
   }
 }
