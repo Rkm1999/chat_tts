@@ -307,9 +307,9 @@ def _invalidate_voice_cache(path: Path):
         stale = [k for k in model._voice_prompt_cache if k[0] == path_str]
         for k in stale:
             del model._voice_prompt_cache[k]
-    invalidate_ref_stats_cache(path)
         if stale:
             print(f"[Cache] Invalidated {len(stale)} stale voice cache entry(ies) for {path_str}")
+    invalidate_ref_stats_cache(path)
 
 
 def _generate_anchor_wav(mdl, speaker: str, language: str, path: Path, instruct: Optional[str] = None):

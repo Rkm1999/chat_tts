@@ -12,7 +12,11 @@ onnxruntime-directml
 # TTS
 faster-qwen3-tts==0.2.5
 qwen-tts==0.1.1
-qwen3-tts-triton==0.1.0
+# qwen3-tts-triton cannot be listed here for two reasons:
+#   1. It declares python_requires>=3.12 (we're on 3.11)
+#   2. It depends on `triton` (Linux name) which doesn't exist on Windows — triton-windows provides it
+# Install manually after pip install -r requirements.txt:
+#   pip install qwen3-tts-triton==0.1.0 --ignore-requires-python --no-deps
 
 # Triton for Windows (drop-in replacement for linux triton; same `import triton` API)
 # RTX 30xx + PyTorch 2.6 (cu124) → triton-windows 3.2.x
