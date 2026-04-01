@@ -151,9 +151,9 @@ def _load_gpu_engine(model_name: str):
             # mode="default" uses inductor without internal CUDA graphs — safe to
             # combine with faster_qwen3_tts's manual graph capture.
             model.predictor_graph.pred_model = torch.compile(
-                model.predictor_graph.pred_model, mode="default")
+                model.predictor_graph.pred_model, mode="max-autotune-no-cudagraphs")
             model.talker_graph.model = torch.compile(
-                model.talker_graph.model, mode="default")
+                model.talker_graph.model, mode="max-autotune-no-cudagraphs")
             print("[Bot] torch.compile applied — fused int8 kernels ready for CUDA graph capture")
         except Exception as e:
             print(f"[Bot] Int8 + compile skipped: {e}")

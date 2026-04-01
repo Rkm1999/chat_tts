@@ -45,8 +45,8 @@ REFERENCES_DIR = Path(__file__).parent / "references"
 
 TTS_SR = 24000  # faster-qwen3-tts output sample rate
 
-HYBRID_MODE = False   # Set False to disable Triton kernel patching (qwen3-tts-triton)
-INT8_QUANTIZE = False  # Set False to disable torchao int8 weight-only quantization
+HYBRID_MODE = True   # Set False to disable Triton kernel patching (qwen3-tts-triton)
+INT8_QUANTIZE = True  # Set False to disable torchao int8 weight-only quantization
 
 INIT_PHRASES = {
     "Korean":     "안녕하세요, 반갑습니다.",
@@ -518,12 +518,12 @@ class TTSApp:
                         print("[GUI] Int8 weight-only quantization applied")
                         # Compile the exact submodules captured by CUDA graphs so inductor
                         # fuses dequantize+matmul before capture locks in the kernels.
-                        # mode="default" uses inductor without internal CUDA graphs — safe to
-                        # combine with faster_qwen3_tts's manual graph capture.
+                        # max-autotune-no-cudagraphs benchmarks kernel configs for best perf
+                        # without internal CUDA graphs — safe with faster_qwen3_tts manual capture.
                         self.model.predictor_graph.pred_model = torch.compile(
-                            self.model.predictor_graph.pred_model, mode="default")
+                            self.model.predictor_graph.pred_model, mode="max-autotune-no-cudagraphs")
                         self.model.talker_graph.model = torch.compile(
-                            self.model.talker_graph.model, mode="default")
+                            self.model.talker_graph.model, mode="max-autotune-no-cudagraphs")
                         print("[GUI] torch.compile applied — fused int8 kernels ready for CUDA graph capture")
                     except Exception as e:
                         print(f"[GUI] Int8 + compile skipped: {e}")

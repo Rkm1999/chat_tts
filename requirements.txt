@@ -1,4 +1,4 @@
-# Python 3.11.9
+# Python 3.12 (Ubuntu 24.04 default)
 # GPU: RTX 30xx (Ampere, sm86) — CUDA 12.4
 
 # Core audio / ML
@@ -12,7 +12,7 @@ onnxruntime-gpu
 # TTS
 faster-qwen3-tts==0.2.5
 qwen-tts==0.1.1
-# qwen3-tts-triton declares python_requires>=3.12 (we're on 3.11); install manually:
+# qwen3-tts-triton declares python_requires>=3.12; install manually:
 #   pip install qwen3-tts-triton==0.1.0 --ignore-requires-python --no-deps
 
 # Triton — bundled with PyTorch on Linux/WSL; listed here to make the dep explicit
