@@ -6,11 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Discord TTS (Text-to-Speech) bot that reads messages in voice channels using the Faster Qwen3-TTS model. Supports 9 speakers, 10 languages, per-user voice customization, and real-time audio streaming to Discord. There is also a standalone Tkinter GUI (`gui.py`) for testing TTS without Discord. The GUI loads the smaller `0.6B-Base` model (vs `1.7B-Base` in the bot) and uses `sounddevice` for local audio playback. The GUI also supports VB-CABLE virtual audio device (can auto-download the driver) to route TTS output into a virtual microphone.
 
+## Runtime Environment
+
+Runs on **WSL2 (Ubuntu 24.04)** with Python 3.12 and an NVIDIA GPU (CUDA 12.4). The git repo lives on the Windows filesystem (`/mnt/c/...`) but the venv must be created in the Linux filesystem (`~/chat_tts_venv`) for I/O performance.
+
 ## Running the Project
 
-Requires Python 3.11.9.
-
 ```bash
+# Initial setup (installs PyTorch + all deps + qwen3-tts-triton)
+bash setup_wsl.sh
+
 # Discord bot
 cd faster_qwen
 python bot.py
@@ -18,14 +23,20 @@ python bot.py
 # Standalone GUI
 cd faster_qwen
 python gui.py
-
-# Build standalone executable
-pyinstaller --onefile faster_qwen/bot.py
 ```
 
 Requires `faster_qwen/.env` with `DISCORD_BOT_TOKEN` set. On startup, models load in two stages: CPU model (`CustomVoice`) first (needed to generate anchor WAVs), then GPU model (`Base`) for real-time streaming. The `engine_ready` asyncio event gates all message processing until both are loaded.
 
+**First startup takes ~75 extra seconds** while `torch.compile` builds its kernel cache. Subsequent startups are fast.
+
 `bot_config.py` parses `.env` manually with `os.environ.setdefault` — it does **not** call `python-dotenv`'s `load_dotenv`.
+
+### Performance flags (top of `bot.py` and `gui.py`)
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `INT8_QUANTIZE` | `True` | int8 weight quantization + `torch.compile` fusion. ~2× realtime on RTX 3060. |
+| `HYBRID_MODE` | `True` | Triton kernel patches (RMSNorm, SwiGLU, M-RoPE). Can now run alongside `INT8_QUANTIZE` — patches run after quantization, before CUDA graph capture. Triton patches cover norms/activations; int8 covers matmuls — complementary. |
 
 ## Architecture
 
@@ -113,8 +124,8 @@ pip install -r requirements.txt
 python -m pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 ```
 
-Key packages: `discord.py[voice]`, `onnxruntime-directml`, `sounddevice`, `numpy`, `scipy`, `tokenizers`. The `faster_qwen3_tts` and `qwen_tts` packages are imported at runtime.
+Key packages: `discord.py[voice]`, `onnxruntime-gpu`, `sounddevice`, `numpy`, `scipy`, `tokenizers`. The `faster_qwen3_tts` and `qwen_tts` packages are imported at runtime.
 
-**Hybrid mode (Triton acceleration):** `qwen3-tts-triton` + `triton-windows>=3.6.0` enable hybrid mode (~4.7x vs PyTorch baseline). After `FasterQwen3TTS.from_pretrained()`, the bot and GUI call `apply_triton_kernels(find_patchable_model(model.model))` to patch RMSNorm/SwiGLU/M-RoPE/Norm+Residual kernels before the first inference, so faster_qwen3_tts's CUDA graph capture includes the fused kernels. If the patch fails it logs a warning and falls back to non-Triton mode. Install with: `pip install -U "triton-windows>=3.6.0" && pip install qwen3-tts-triton --ignore-requires-python` (the package requires Python 3.12+ but works on 3.11 in practice).
+**Hybrid mode (Triton acceleration):** `qwen3-tts-triton` enables hybrid mode. Triton itself ships with PyTorch on Linux/WSL. After `FasterQwen3TTS.from_pretrained()`, the bot and GUI call `apply_triton_kernels(find_patchable_model(model.model))` to patch RMSNorm/SwiGLU/M-RoPE/Norm+Residual kernels before the first inference, so faster_qwen3_tts's CUDA graph capture includes the fused kernels. If the patch fails it logs a warning and falls back to non-Triton mode. Install with: `pip install qwen3-tts-triton --ignore-requires-python --no-deps` (the package declares Python 3.12+ but works on 3.12 in practice).
 
 Git LFS is used for large model files (`.gguf`, `.onnx`, `.npy`, `.safetensors`, `.dll`, `.exe`).

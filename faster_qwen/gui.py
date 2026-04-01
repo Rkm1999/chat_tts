@@ -45,7 +45,7 @@ REFERENCES_DIR = Path(__file__).parent / "references"
 
 TTS_SR = 24000  # faster-qwen3-tts output sample rate
 
-HYBRID_MODE = True   # Set False to disable Triton kernel patching (qwen3-tts-triton)
+HYBRID_MODE = True    # Set False to disable Triton kernel patching (qwen3-tts-triton)
 INT8_QUANTIZE = True  # Set False to disable torchao int8 weight-only quantization
 
 INIT_PHRASES = {
@@ -516,18 +516,9 @@ class TTSApp:
                         internal = find_patchable_model(self.model.model)
                         quantize_(internal, Int8WeightOnlyConfig())
                         print("[GUI] Int8 weight-only quantization applied")
-                        # Compile the exact submodules captured by CUDA graphs so inductor
-                        # fuses dequantize+matmul before capture locks in the kernels.
-                        # max-autotune-no-cudagraphs benchmarks kernel configs for best perf
-                        # without internal CUDA graphs — safe with faster_qwen3_tts manual capture.
-                        self.model.predictor_graph.pred_model = torch.compile(
-                            self.model.predictor_graph.pred_model, mode="max-autotune-no-cudagraphs")
-                        self.model.talker_graph.model = torch.compile(
-                            self.model.talker_graph.model, mode="max-autotune-no-cudagraphs")
-                        print("[GUI] torch.compile applied — fused int8 kernels ready for CUDA graph capture")
                     except Exception as e:
-                        print(f"[GUI] Int8 + compile skipped: {e}")
-                elif HYBRID_MODE:
+                        print(f"[GUI] Int8 skipped: {e}")
+                if HYBRID_MODE:
                     try:
                         from qwen3_tts_triton.models.patching import find_patchable_model, apply_triton_kernels
                         internal = find_patchable_model(self.model.model)
@@ -535,6 +526,17 @@ class TTSApp:
                         print("[GUI] Triton kernels applied — hybrid mode active")
                     except Exception as triton_exc:
                         print(f"[GUI] Triton patching skipped: {triton_exc}")
+                if INT8_QUANTIZE:
+                    try:
+                        # Compile after all patches so inductor sees the full patched graph
+                        # (int8 dequant+matmul + Triton norms) and fuses across them.
+                        self.model.predictor_graph.pred_model = torch.compile(
+                            self.model.predictor_graph.pred_model, mode="max-autotune-no-cudagraphs")
+                        self.model.talker_graph.model = torch.compile(
+                            self.model.talker_graph.model, mode="max-autotune-no-cudagraphs")
+                        print("[GUI] torch.compile applied — kernels ready for CUDA graph capture")
+                    except Exception as e:
+                        print(f"[GUI] torch.compile skipped: {e}")
             except Exception as exc:
                 self.ui_queue.put(("error", f"Failed to reload Base model: {exc}"))
 
