@@ -36,7 +36,10 @@
       "WebFetch(domain:docs.vllm.ai)",
       "Bash(grep -v \"^.venv$\")",
       "Bash(grep:*)",
-      "Bash(.venv/Scripts/pip show:*)"
+      "Bash(.venv/Scripts/pip show:*)",
+      "Bash(wsl:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(xargs ls:*)"
     ]
   }
 }

@@ -25,7 +25,8 @@ from bot_config import load_config, BotConfig
 from bot_guild import GuildSettings, GuildState, GuildStateManager
 from bot_tts_worker import TTSRequest, guild_tts_worker, _to_float32, ANCHOR_TEXT, invalidate_ref_stats_cache
 
-HYBRID_MODE = True  # Set False to disable Triton kernel patching (qwen3-tts-triton)
+HYBRID_MODE = True   # Set False to disable Triton kernel patching (qwen3-tts-triton)
+INT8_QUANTIZE = True  # Set False to disable torchao int8 weight-only quantization
 
 # ── Speaker / Language constants ─────────────────────────────────────────────
 
@@ -138,7 +139,25 @@ def _load_gpu_engine(model_name: str):
     import torch
     from faster_qwen3_tts import FasterQwen3TTS
     model = FasterQwen3TTS.from_pretrained(model_name, device="cuda", dtype=torch.bfloat16)
-    if HYBRID_MODE:
+    if INT8_QUANTIZE:
+        try:
+            from qwen3_tts_triton.models.patching import find_patchable_model
+            from torchao.quantization import Int8WeightOnlyConfig, quantize_
+            internal = find_patchable_model(model.model)
+            quantize_(internal, Int8WeightOnlyConfig())
+            print("[Bot] Int8 weight-only quantization applied")
+            # Compile the exact submodules captured by CUDA graphs so inductor
+            # fuses dequantize+matmul before capture locks in the kernels.
+            # mode="default" uses inductor without internal CUDA graphs — safe to
+            # combine with faster_qwen3_tts's manual graph capture.
+            model.predictor_graph.pred_model = torch.compile(
+                model.predictor_graph.pred_model, mode="default")
+            model.talker_graph.model = torch.compile(
+                model.talker_graph.model, mode="default")
+            print("[Bot] torch.compile applied — fused int8 kernels ready for CUDA graph capture")
+        except Exception as e:
+            print(f"[Bot] Int8 + compile skipped: {e}")
+    elif HYBRID_MODE:
         try:
             from qwen3_tts_triton.models.patching import find_patchable_model, apply_triton_kernels
             internal = find_patchable_model(model.model)

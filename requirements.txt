@@ -7,22 +7,18 @@ scipy==1.15.3
 sounddevice==0.5.1
 soundfile==0.12.1
 tokenizers==0.22.2
-onnxruntime-directml
+onnxruntime-gpu
 
 # TTS
 faster-qwen3-tts==0.2.5
 qwen-tts==0.1.1
-# qwen3-tts-triton cannot be listed here for two reasons:
-#   1. It declares python_requires>=3.12 (we're on 3.11)
-#   2. It depends on `triton` (Linux name) which doesn't exist on Windows — triton-windows provides it
-# Install manually after pip install -r requirements.txt:
+# qwen3-tts-triton declares python_requires>=3.12 (we're on 3.11); install manually:
 #   pip install qwen3-tts-triton==0.1.0 --ignore-requires-python --no-deps
 
-# Triton for Windows (drop-in replacement for linux triton; same `import triton` API)
-# RTX 30xx + PyTorch 2.6 (cu124) → triton-windows 3.2.x
-# Version table: PyTorch 2.6 → Triton 3.2 | PyTorch 2.7+ → Triton 3.3+ | PyTorch 2.10 → Triton 3.6
-triton-windows==3.2.0.post21
-
+# Triton — bundled with PyTorch on Linux/WSL; listed here to make the dep explicit
+# PyTorch 2.6 (cu124) ships Triton 3.2
+triton
+torchao==0.9.0
 # PyTorch — must be installed separately with CUDA support:
 #   pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 torch==2.6.0
@@ -32,5 +28,3 @@ torchaudio==2.6.0
 discord.py[voice]
 python-dotenv==1.1.0
 
-# GUI / build
-pyinstaller==6.11.0

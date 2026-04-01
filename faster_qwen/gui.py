@@ -4,22 +4,16 @@ gui.py - Tkinter chat-style GUI for Qwen3-TTS (faster-qwen3-tts backend)
 Uses faster-qwen3-tts with CUDA graph capture for 4-10x speedup over GGUF/ONNX.
 Single process, two threads: main (UI) + synthesis.
 """
-import ctypes
 import gc
 import logging
 import os
-import subprocess
 import sys
 import queue
-import tempfile
 import threading
 import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 from pathlib import Path
-import urllib.request
-import webbrowser
-import zipfile
 import numpy as np
 import sounddevice as sd
 import torch
@@ -51,7 +45,8 @@ REFERENCES_DIR = Path(__file__).parent / "references"
 
 TTS_SR = 24000  # faster-qwen3-tts output sample rate
 
-HYBRID_MODE = True  # Set False to disable Triton kernel patching (qwen3-tts-triton)
+HYBRID_MODE = False   # Set False to disable Triton kernel patching (qwen3-tts-triton)
+INT8_QUANTIZE = False  # Set False to disable torchao int8 weight-only quantization
 
 INIT_PHRASES = {
     "Korean":     "안녕하세요, 반갑습니다.",
@@ -66,20 +61,7 @@ INIT_PHRASES = {
     "Portuguese": "Olá, prazer em conhecê-lo.",
 }
 
-_VBCABLE_ZIP_URL = "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
-
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _cable_installed() -> bool:
-    try:
-        return any(
-            "cable input" in d['name'].lower() and d['max_output_channels'] > 0
-            for d in sd.query_devices()
-        )
-    except Exception:
-        return False
-
 
 def _get_output_devices() -> list[tuple[int, str]]:
     try:
@@ -112,7 +94,6 @@ class TTSApp:
         self._stop_event   = threading.Event()
         self._voice_ready  = False
         self._previewing   = False
-        self._cable_check_done   = False
         self._discord_tip_shown  = False
         self._meta_tag_counter = 0
         self._speak_queue: queue.Queue = queue.Queue()  # (text, speaker, language, tag)
@@ -528,7 +509,25 @@ class TTSApp:
             try:
                 self.model = FasterQwen3TTS.from_pretrained(
                     GPU_MODEL_NAME, device="cuda", dtype=torch.bfloat16)
-                if HYBRID_MODE:
+                if INT8_QUANTIZE:
+                    try:
+                        from qwen3_tts_triton.models.patching import find_patchable_model
+                        from torchao.quantization import Int8WeightOnlyConfig, quantize_
+                        internal = find_patchable_model(self.model.model)
+                        quantize_(internal, Int8WeightOnlyConfig())
+                        print("[GUI] Int8 weight-only quantization applied")
+                        # Compile the exact submodules captured by CUDA graphs so inductor
+                        # fuses dequantize+matmul before capture locks in the kernels.
+                        # mode="default" uses inductor without internal CUDA graphs — safe to
+                        # combine with faster_qwen3_tts's manual graph capture.
+                        self.model.predictor_graph.pred_model = torch.compile(
+                            self.model.predictor_graph.pred_model, mode="default")
+                        self.model.talker_graph.model = torch.compile(
+                            self.model.talker_graph.model, mode="default")
+                        print("[GUI] torch.compile applied — fused int8 kernels ready for CUDA graph capture")
+                    except Exception as e:
+                        print(f"[GUI] Int8 + compile skipped: {e}")
+                elif HYBRID_MODE:
                     try:
                         from qwen3_tts_triton.models.patching import find_patchable_model, apply_triton_kernels
                         internal = find_patchable_model(self.model.model)
@@ -805,10 +804,6 @@ class TTSApp:
                     self._status(payload)
                     self._set_input_state("normal")
                     self.entry.focus()
-                    if not self._cable_check_done:
-                        self._cable_check_done = True
-                        if not _cable_installed():
-                            self._offer_cable_install()
                 elif kind == "finalize_meta":
                     tag, speaker, language, duration = payload
                     self._finalize_chat_meta(tag, speaker, language, duration)
@@ -846,59 +841,6 @@ class TTSApp:
                   self.tone_test_btn, self.tone_regen_btn, self.tone_reset_btn,
                   self.instruct_entry):
             w.config(state=state)
-
-    # ── VB-Audio Virtual Cable install ────────────────────────────────────────
-
-    def _offer_cable_install(self):
-        if not messagebox.askyesno(
-            "VB-Audio Virtual Cable not found",
-            "CABLE Input device not detected.\n\n"
-            "Install VB-Audio Virtual Cable now?\n"
-            "(Requires internet + admin approval)",
-            icon="question",
-        ):
-            return
-        self._append_system("Downloading VB-Audio Virtual Cable installer…")
-        threading.Thread(target=self._cable_install_thread, daemon=True).start()
-
-    def _cable_install_thread(self):
-        # Option A: Chocolatey
-        try:
-            r = subprocess.run(
-                ["choco", "install", "vb-cable", "-y"],
-                capture_output=True, text=True, timeout=120,
-            )
-            if r.returncode == 0:
-                self.ui_queue.put(("system",
-                    "VB-Audio Virtual Cable installed via Chocolatey. Click ↺ to refresh."))
-                return
-        except FileNotFoundError:
-            pass
-
-        # Option B: Direct download + elevated installer
-        try:
-            tmp = tempfile.mkdtemp()
-            zip_path = os.path.join(tmp, "VBCABLE.zip")
-            self.ui_queue.put(("system", "Downloading VBCABLE_Driver_Pack43.zip…"))
-            urllib.request.urlretrieve(_VBCABLE_ZIP_URL, zip_path)
-
-            with zipfile.ZipFile(zip_path) as zf:
-                zf.extractall(tmp)
-
-            exe = os.path.join(tmp, "VBCABLE_Setup_x64.exe")
-            if not os.path.exists(exe):
-                exe = os.path.join(tmp, "VBCABLE_Setup.exe")
-
-            ctypes.windll.shell32.ShellExecuteW(
-                None, "runas", exe, "/VERYSILENT /NORESTART", os.path.dirname(exe), 1
-            )
-            self.ui_queue.put(("system",
-                "Installer launched. Approve the UAC + driver dialogs, "
-                "then click ↺ to refresh devices."))
-        except Exception as exc:
-            webbrowser.open("https://vb-audio.com/Cable/")
-            self.ui_queue.put(("system",
-                f"Download failed ({exc}). Browser opened — install manually, then click ↺."))
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
 
