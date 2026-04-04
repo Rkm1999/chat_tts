@@ -45,7 +45,9 @@
       "Bash(ls C:/git/chat_tts/faster_qwen/*.py)",
       "Bash(python3 -c \"import sys; print\\(sys.version\\)\")",
       "Bash(python3 -c \"import torch; help\\(torch.backends.cuda.enable_flash_sdp\\)\")",
-      "Bash(python3 -c \"import torch; print\\(torch.__version__\\); print\\(hasattr\\(torch.backends.cuda, 'enable_flash_sdp'\\)\\); print\\(hasattr\\(torch.backends.cuda, 'enable_mem_efficient_sdp'\\)\\); print\\(hasattr\\(torch.backends.cuda, 'enable_math_sdp'\\)\\)\")"
+      "Bash(python3 -c \"import torch; print\\(torch.__version__\\); print\\(hasattr\\(torch.backends.cuda, 'enable_flash_sdp'\\)\\); print\\(hasattr\\(torch.backends.cuda, 'enable_mem_efficient_sdp'\\)\\); print\\(hasattr\\(torch.backends.cuda, 'enable_math_sdp'\\)\\)\")",
+      "Bash(python3 -c \"import transformers; import inspect; from transformers import StaticCache; print\\(inspect.getsource\\(StaticCache\\)\\)\")",
+      "Bash(python3:*)"
     ]
   }
 }

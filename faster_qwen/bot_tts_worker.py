@@ -165,6 +165,7 @@ def _synthesize_blocking(model, source, text: str, language: str,
         return
 
     t0 = time.monotonic()
+    print(f"[Latency] executor thread started at {t0:.3f}")
     first_sr = None
     total_samples = 0
     ref_stats      = _get_ref_audio_stats(reference)
@@ -195,7 +196,11 @@ def _synthesize_blocking(model, source, text: str, language: str,
             first_sr = sr
             elapsed = time.monotonic() - t0
             print(f"[TTS Worker {guild_id}] First chunk in {elapsed:.3f}s  ({len(audio)/sr*1000:.0f}ms audio)")
-        source.feed(audio)
+            t_feed = time.monotonic()
+            source.feed(audio)
+            print(f"[Latency] pcm convert + queue put: {time.monotonic() - t_feed:.4f}s")
+        else:
+            source.feed(audio)
         total_samples += len(audio)
         current_duration = total_samples / sr
 
@@ -262,10 +267,17 @@ async def guild_tts_worker(state, model, config, default_reference: Optional[str
                 break
             if not state.voice_client or not state.voice_client.is_connected():
                 continue
+            import time as _time
+            t_dequeued = _time.monotonic()
+            t_queued = getattr(req, '_t_queued', None)
+            if t_queued is not None:
+                print(f"[Latency] queue wait: {t_dequeued - t_queued:.3f}s")
             language, reference = _voice_args(state, req, default_reference)
             source = StreamingAudioSource(volume=state.settings.volume)
             state.skip_event.clear()
             print(f"[TTS Worker {state.guild_id}] Synthesizing (ref={reference!r}): {req.text[:80]!r}")
+            t_executor = _time.monotonic()
+            print(f"[Latency] submitting executor at +{t_executor - t_dequeued:.3f}s from dequeue")
             synth_fut = loop.run_in_executor(
                 None, _synthesize_blocking, model, source,
                 req.text[:state.settings.max_chars], language, state.guild_id,

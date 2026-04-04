@@ -1,0 +1,442 @@
+[
+  {
+    "label": "INT8=N  HYBRID=N  KV_INT8=N",
+    "flags": {
+      "int8_quantize": false,
+      "hybrid_mode": false,
+      "kv_cache_int8": false
+    },
+    "vram_after_load_mb": 2070.36376953125,
+    "vram_after_warmup_mb": 2363.9140625,
+    "overall_rtf": 0.617670571893797,
+    "overall_ttfb_ms": 271.8378117308021,
+    "overall_total_ms": 3004.7673126643836,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 2207.4764693388715,
+        "avg_ttfb_ms": 279.0221070172265,
+        "avg_audio_dur_s": 3.44,
+        "avg_rtf": 0.6434241994424051,
+        "avg_peak_vram": 2611.14697265625
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 2428.412514641726,
+        "avg_ttfb_ms": 264.8623276424284,
+        "avg_audio_dur_s": 3.813333333333333,
+        "avg_rtf": 0.6365694214472575,
+        "avg_peak_vram": 2611.14697265625
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 3588.175989338197,
+        "avg_ttfb_ms": 264.2570416792296,
+        "avg_audio_dur_s": 5.973333333333334,
+        "avg_rtf": 0.6007772547562891,
+        "avg_peak_vram": 2611.14697265625
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 4016.294326982461,
+        "avg_ttfb_ms": 285.00393031087395,
+        "avg_audio_dur_s": 6.773333333333333,
+        "avg_rtf": 0.5934590945557425,
+        "avg_peak_vram": 2611.14697265625
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 2783.477263020662,
+        "avg_ttfb_ms": 266.0436520042519,
+        "avg_audio_dur_s": 4.533333333333333,
+        "avg_rtf": 0.614122889267291,
+        "avg_peak_vram": 2611.14697265625
+      }
+    ]
+  },
+  {
+    "label": "INT8=N  HYBRID=N  KV_INT8=Y",
+    "flags": {
+      "int8_quantize": false,
+      "hybrid_mode": false,
+      "kv_cache_int8": true
+    },
+    "vram_after_load_mb": 2103.02001953125,
+    "vram_after_warmup_mb": 2270.9765625,
+    "overall_rtf": 0.7607527286820155,
+    "overall_ttfb_ms": 328.43960426980635,
+    "overall_total_ms": 3942.0277393384217,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 2876.5933133351305,
+        "avg_ttfb_ms": 334.81381234014407,
+        "avg_audio_dur_s": 3.6799999999999997,
+        "avg_rtf": 0.7820610882909685,
+        "avg_peak_vram": 2517.95654296875
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 3048.638313349026,
+        "avg_ttfb_ms": 319.44448766686645,
+        "avg_audio_dur_s": 3.9466666666666668,
+        "avg_rtf": 0.7726553198341582,
+        "avg_peak_vram": 2517.95654296875
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 4618.316554328582,
+        "avg_ttfb_ms": 334.22393099560094,
+        "avg_audio_dur_s": 6.186666666666667,
+        "avg_rtf": 0.7466382617365114,
+        "avg_peak_vram": 2517.95654296875
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 5723.613605000234,
+        "avg_ttfb_ms": 333.6882723378949,
+        "avg_audio_dur_s": 7.760000000000001,
+        "avg_rtf": 0.7383787729984604,
+        "avg_peak_vram": 2517.95654296875
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 3442.9769106791355,
+        "avg_ttfb_ms": 320.0275180085252,
+        "avg_audio_dur_s": 4.506666666666667,
+        "avg_rtf": 0.7640302005499793,
+        "avg_peak_vram": 2517.95654296875
+      }
+    ]
+  },
+  {
+    "label": "INT8=N  HYBRID=Y  KV_INT8=N",
+    "flags": {
+      "int8_quantize": false,
+      "hybrid_mode": true,
+      "kv_cache_int8": false
+    },
+    "vram_after_load_mb": 2119.27001953125,
+    "vram_after_warmup_mb": 2395.8828125,
+    "overall_rtf": 0.5772323038169281,
+    "overall_ttfb_ms": 247.89718386794752,
+    "overall_total_ms": 2807.3485487955627,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 1934.958880650811,
+        "avg_ttfb_ms": 252.57262599188834,
+        "avg_audio_dur_s": 3.1999999999999997,
+        "avg_rtf": 0.6058218600366391,
+        "avg_peak_vram": 2642.8583984375
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 2360.3462086757645,
+        "avg_ttfb_ms": 251.44358266455433,
+        "avg_audio_dur_s": 4.053333333333334,
+        "avg_rtf": 0.5822377178454284,
+        "avg_peak_vram": 2642.8583984375
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 3560.237046001324,
+        "avg_ttfb_ms": 243.39172535110265,
+        "avg_audio_dur_s": 6.3999999999999995,
+        "avg_rtf": 0.5562925291914708,
+        "avg_peak_vram": 2642.8583984375
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 3599.9096476783357,
+        "avg_ttfb_ms": 244.82206233854717,
+        "avg_audio_dur_s": 6.533333333333334,
+        "avg_rtf": 0.5517012019628657,
+        "avg_peak_vram": 2642.8583984375
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 2581.2909609715766,
+        "avg_ttfb_ms": 247.25592299364507,
+        "avg_audio_dur_s": 4.373333333333334,
+        "avg_rtf": 0.5901082100482371,
+        "avg_peak_vram": 2642.8583984375
+      }
+    ]
+  },
+  {
+    "label": "INT8=N  HYBRID=Y  KV_INT8=Y",
+    "flags": {
+      "int8_quantize": false,
+      "hybrid_mode": true,
+      "kv_cache_int8": true
+    },
+    "vram_after_load_mb": 2135.52001953125,
+    "vram_after_warmup_mb": 2303.4765625,
+    "overall_rtf": 0.7389040623038343,
+    "overall_ttfb_ms": 314.22351174211747,
+    "overall_total_ms": 3710.490547469817,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 2586.511247655532,
+        "avg_ttfb_ms": 318.2681713369675,
+        "avg_audio_dur_s": 3.3866666666666667,
+        "avg_rtf": 0.7654436088209171,
+        "avg_peak_vram": 2550.45361328125
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 3067.4650139990263,
+        "avg_ttfb_ms": 311.49518967140466,
+        "avg_audio_dur_s": 4.1066666666666665,
+        "avg_rtf": 0.7471111673075281,
+        "avg_peak_vram": 2550.45361328125
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 4411.742114345543,
+        "avg_ttfb_ms": 311.8338590138592,
+        "avg_audio_dur_s": 6.133333333333333,
+        "avg_rtf": 0.719813899937361,
+        "avg_peak_vram": 2550.45361328125
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 5120.6229576879805,
+        "avg_ttfb_ms": 319.29505135243136,
+        "avg_audio_dur_s": 7.12,
+        "avg_rtf": 0.7189830238576119,
+        "avg_peak_vram": 2550.45361328125
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 3366.111403661004,
+        "avg_ttfb_ms": 310.2252873359248,
+        "avg_audio_dur_s": 4.533333333333333,
+        "avg_rtf": 0.7431686115957534,
+        "avg_peak_vram": 2550.45361328125
+      }
+    ]
+  },
+  {
+    "label": "INT8=Y  HYBRID=N  KV_INT8=N",
+    "flags": {
+      "int8_quantize": true,
+      "hybrid_mode": false,
+      "kv_cache_int8": false
+    },
+    "vram_after_load_mb": 1681.98876953125,
+    "vram_after_warmup_mb": 1950.4765625,
+    "overall_rtf": 0.4266578805222675,
+    "overall_ttfb_ms": 221.24601892816523,
+    "overall_total_ms": 2134.5594242603206,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 1636.5537183204044,
+        "avg_ttfb_ms": 225.45361932134256,
+        "avg_audio_dur_s": 3.6266666666666665,
+        "avg_rtf": 0.4513742715166877,
+        "avg_peak_vram": 2197.4521484375
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 1784.6963026677258,
+        "avg_ttfb_ms": 214.40492599504068,
+        "avg_audio_dur_s": 4.053333333333334,
+        "avg_rtf": 0.4406841877157799,
+        "avg_peak_vram": 2197.4521484375
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 2441.462015985356,
+        "avg_ttfb_ms": 219.84782265887284,
+        "avg_audio_dur_s": 5.946666666666666,
+        "avg_rtf": 0.41081369143188917,
+        "avg_peak_vram": 2197.4521484375
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 2869.8710976556563,
+        "avg_ttfb_ms": 216.5653359843418,
+        "avg_audio_dur_s": 7.226666666666667,
+        "avg_rtf": 0.3971070743685861,
+        "avg_peak_vram": 2197.4521484375
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 1940.213986672461,
+        "avg_ttfb_ms": 229.95839068122828,
+        "avg_audio_dur_s": 4.4799999999999995,
+        "avg_rtf": 0.4333101775783948,
+        "avg_peak_vram": 2197.4521484375
+      }
+    ]
+  },
+  {
+    "label": "INT8=Y  HYBRID=N  KV_INT8=Y",
+    "flags": {
+      "int8_quantize": true,
+      "hybrid_mode": false,
+      "kv_cache_int8": true
+    },
+    "vram_after_load_mb": 1690.11376953125,
+    "vram_after_warmup_mb": 1849.9453125,
+    "overall_rtf": 0.4312927285274045,
+    "overall_ttfb_ms": 237.06198753401017,
+    "overall_total_ms": 2072.4221402701614,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 1752.6200923409003,
+        "avg_ttfb_ms": 243.83215534423167,
+        "avg_audio_dur_s": 3.8666666666666667,
+        "avg_rtf": 0.45391354925732924,
+        "avg_peak_vram": 2096.9208984375
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 1610.0473233382218,
+        "avg_ttfb_ms": 229.87392564148954,
+        "avg_audio_dur_s": 3.6,
+        "avg_rtf": 0.44827905389399514,
+        "avg_peak_vram": 2096.9208984375
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 2500.264080687581,
+        "avg_ttfb_ms": 241.62753201865902,
+        "avg_audio_dur_s": 6.080000000000001,
+        "avg_rtf": 0.41154304205374487,
+        "avg_peak_vram": 2096.9208984375
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 2605.1712139936476,
+        "avg_ttfb_ms": 231.9171653361991,
+        "avg_audio_dur_s": 6.373333333333334,
+        "avg_rtf": 0.4087703130092349,
+        "avg_peak_vram": 2096.9208984375
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 1894.007990990455,
+        "avg_ttfb_ms": 238.0591593294715,
+        "avg_audio_dur_s": 4.373333333333333,
+        "avg_rtf": 0.4339576844227187,
+        "avg_peak_vram": 2096.9208984375
+      }
+    ]
+  },
+  {
+    "label": "INT8=Y  HYBRID=Y  KV_INT8=N",
+    "flags": {
+      "int8_quantize": true,
+      "hybrid_mode": true,
+      "kv_cache_int8": false
+    },
+    "vram_after_load_mb": 1698.23876953125,
+    "vram_after_warmup_mb": 1974.8515625,
+    "overall_rtf": 0.5622115640335792,
+    "overall_ttfb_ms": 266.6295476645852,
+    "overall_total_ms": 2840.8711922665434,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 1946.9122196702908,
+        "avg_ttfb_ms": 269.02835732713964,
+        "avg_audio_dur_s": 3.3066666666666666,
+        "avg_rtf": 0.588767515769827,
+        "avg_peak_vram": 2221.8271484375
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 2271.0988956775204,
+        "avg_ttfb_ms": 260.0952783444275,
+        "avg_audio_dur_s": 3.973333333333333,
+        "avg_rtf": 0.57176000216879,
+        "avg_peak_vram": 2221.8271484375
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 3511.605237998689,
+        "avg_ttfb_ms": 275.3577156884906,
+        "avg_audio_dur_s": 6.48,
+        "avg_rtf": 0.5418369353418734,
+        "avg_peak_vram": 2221.8271484375
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 3941.4495426462963,
+        "avg_ttfb_ms": 266.37963263783604,
+        "avg_audio_dur_s": 7.306666666666666,
+        "avg_rtf": 0.5399594608478905,
+        "avg_peak_vram": 2221.8271484375
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 2533.2900653399215,
+        "avg_ttfb_ms": 262.28675432503223,
+        "avg_audio_dur_s": 4.453333333333333,
+        "avg_rtf": 0.5687339060395155,
+        "avg_peak_vram": 2221.8271484375
+      }
+    ]
+  },
+  {
+    "label": "INT8=Y  HYBRID=Y  KV_INT8=Y",
+    "flags": {
+      "int8_quantize": true,
+      "hybrid_mode": true,
+      "kv_cache_int8": true
+    },
+    "vram_after_load_mb": 1714.48876953125,
+    "vram_after_warmup_mb": 1882.4453125,
+    "overall_rtf": 1.1101231579445707,
+    "overall_ttfb_ms": 450.56396919923526,
+    "overall_total_ms": 5434.578112602079,
+    "sentences": [
+      {
+        "text": "안녕하세요, 오늘 날씨가 정말 좋네요.",
+        "avg_total_ms": 3907.2204573700824,
+        "avg_ttfb_ms": 445.41706835540634,
+        "avg_audio_dur_s": 3.466666666666667,
+        "avg_rtf": 1.1263445442939022,
+        "avg_peak_vram": 2129.4208984375
+      },
+      {
+        "text": "빠른 갈색 여우가 게으른 개를 뛰어넘었습니다.",
+        "avg_total_ms": 4481.762653662979,
+        "avg_ttfb_ms": 442.3498976587628,
+        "avg_audio_dur_s": 4.026666666666666,
+        "avg_rtf": 1.1145246207741835,
+        "avg_peak_vram": 2129.4208984375
+      },
+      {
+        "text": "이 문장은 조금 더 길게 읽어보는 테스트입니다. 잘 들리시나요?",
+        "avg_total_ms": 6368.521555656723,
+        "avg_ttfb_ms": 451.15532000393915,
+        "avg_audio_dur_s": 5.840000000000001,
+        "avg_rtf": 1.0887806673493576,
+        "avg_peak_vram": 2129.4208984375
+      },
+      {
+        "text": "하나, 둘, 셋, 넷, 다섯, 여섯, 일곱, 여덟, 아홉, 열.",
+        "avg_total_ms": 7344.621931319125,
+        "avg_ttfb_ms": 449.3793073149088,
+        "avg_audio_dur_s": 6.746666666666666,
+        "avg_rtf": 1.0886998954792797,
+        "avg_peak_vram": 2129.4208984375
+      },
+      {
+        "text": "저는 오늘 커피 두 잔을 마셨는데도 여전히 졸립니다.",
+        "avg_total_ms": 5070.763965001485,
+        "avg_ttfb_ms": 464.5182526631591,
+        "avg_audio_dur_s": 4.4799999999999995,
+        "avg_rtf": 1.1322660618261307,
+        "avg_peak_vram": 2129.4208984375
+      }
+    ]
+  }
+]

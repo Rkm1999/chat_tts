@@ -47,6 +47,7 @@ TTS_SR = 24000  # faster-qwen3-tts output sample rate
 
 HYBRID_MODE = True    # Set False to disable Triton kernel patching (qwen3-tts-triton)
 INT8_QUANTIZE = True  # Set False to disable torchao int8 weight-only quantization
+KV_CACHE_INT8 = True  # Set False to disable int8 KV cache quantization (~48% KV VRAM reduction)
 
 INIT_PHRASES = {
     "Korean":     "안녕하세요, 반갑습니다.",
@@ -537,6 +538,13 @@ class TTSApp:
                         print("[GUI] torch.compile applied — kernels ready for CUDA graph capture")
                     except Exception as e:
                         print(f"[GUI] torch.compile skipped: {e}")
+                if KV_CACHE_INT8:
+                    try:
+                        from kv_cache_quant import replace_static_caches
+                        n = replace_static_caches(self.model)
+                        print(f"[GUI] KV cache int8 quantization applied ({n} layers)")
+                    except Exception as e:
+                        print(f"[GUI] KV cache int8 skipped: {e}")
             except Exception as exc:
                 self.ui_queue.put(("error", f"Failed to reload Base model: {exc}"))
 

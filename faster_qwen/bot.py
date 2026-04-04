@@ -27,6 +27,7 @@ from bot_tts_worker import TTSRequest, guild_tts_worker, _to_float32, ANCHOR_TEX
 
 HYBRID_MODE = True    # Set False to disable Triton kernel patching (qwen3-tts-triton)
 INT8_QUANTIZE = True  # Set False to disable torchao int8 weight-only quantization
+KV_CACHE_INT8 = True  # Set False to disable int8 KV cache quantization (~48% KV VRAM reduction)
 
 # ── Speaker / Language constants ─────────────────────────────────────────────
 
@@ -169,6 +170,13 @@ def _load_gpu_engine(model_name: str):
             print("[Bot] torch.compile applied — kernels ready for CUDA graph capture")
         except Exception as e:
             print(f"[Bot] torch.compile skipped: {e}")
+    if KV_CACHE_INT8:
+        try:
+            from kv_cache_quant import replace_static_caches
+            n = replace_static_caches(model)
+            print(f"[Bot] KV cache int8 quantization applied ({n} layers)")
+        except Exception as e:
+            print(f"[Bot] KV cache int8 skipped: {e}")
     return model
 
 
@@ -176,6 +184,95 @@ def _load_cpu_engine(model_name: str):
     import torch
     from qwen_tts import Qwen3TTSModel
     return Qwen3TTSModel.from_pretrained(model_name, device_map="cpu", torch_dtype=torch.float32)
+
+
+def _warmup_gpu_engine(mdl, ref_path: str, language: str) -> None:
+    """Blocking — run in executor.
+    Triggers faster_qwen3_tts's CUDA graph capture by running one full
+    synthesis before the first real user message arrives.
+    The audio output is discarded; only the side-effect (graph capture) matters.
+    """
+    import time
+    from bot_tts_worker import ANCHOR_TEXT
+    print("[Bot] Warming up GPU engine (CUDA graph capture) ...")
+    t0 = time.monotonic()
+    try:
+        iterator = mdl.generate_voice_clone_streaming(
+            text=ANCHOR_TEXT,
+            language=language,
+            ref_audio=ref_path,
+            ref_text=ANCHOR_TEXT,
+            chunk_size=4,
+            xvec_only=False,
+        )
+        for _ in iterator:
+            pass  # consume all chunks to complete graph capture
+        print(f"[Bot] GPU warm-up done in {time.monotonic() - t0:.1f}s — first user message will be fast.")
+    except Exception as e:
+        print(f"[Bot] GPU warm-up failed (non-fatal): {e}")
+
+
+def _time_opus_encode_ms(samples: int = 200) -> float:
+    """Returns median Opus encode time in ms over `samples` frames of silence."""
+    import time as _t
+    encoder = discord.opus.Encoder()
+    silence = b"\x00" * 3840  # one 20ms frame: 960 samples × 2ch × 2 bytes
+    times = []
+    for _ in range(samples):
+        t = _t.monotonic()
+        encoder.encode(silence, 960)
+        times.append(_t.monotonic() - t)
+    times.sort()
+    return times[len(times) // 2] * 1000
+
+
+def _measure_tcp_rtt_ms(host: str, port: int, samples: int = 10) -> float | None:
+    """Returns median TCP connect-time RTT in ms to the Discord voice server."""
+    import socket
+    import time as _t
+    times = []
+    for _ in range(samples):
+        try:
+            t = _t.monotonic()
+            s = socket.create_connection((host, port), timeout=2.0)
+            times.append((_t.monotonic() - t) * 1000)
+            s.close()
+        except Exception:
+            pass
+    if not times:
+        return None
+    times.sort()
+    return times[len(times) // 2]
+
+
+async def _log_voice_server_rtt(vc: discord.VoiceClient) -> None:
+    """Measure TCP RTT to the voice endpoint, cache it, and log one-way estimate."""
+    from bot_audio import set_voice_rtt, set_voice_endpoint
+    endpoint = getattr(vc, "endpoint", None)
+    if not endpoint:
+        return
+    host = endpoint.split(":")[0]
+    port = int(endpoint.split(":")[1]) if ":" in endpoint else 443
+    set_voice_endpoint(host, port)
+    loop = asyncio.get_event_loop()
+    rtt = await loop.run_in_executor(None, _measure_tcp_rtt_ms, host, port)
+    if rtt is not None:
+        set_voice_rtt(rtt)
+        print(f"[Latency] TCP RTT to {host}: {rtt:.1f}ms round-trip (~{rtt/2:.1f}ms one-way)")
+    else:
+        print(f"[Latency] TCP RTT measurement to {host} failed")
+
+
+async def _refresh_voice_rtt() -> None:
+    """Single-sample TCP RTT refresh — fired as a background task per message."""
+    from bot_audio import set_voice_rtt, _voice_server_endpoint
+    if _voice_server_endpoint is None:
+        return
+    host, port = _voice_server_endpoint
+    loop = asyncio.get_event_loop()
+    rtt = await loop.run_in_executor(None, _measure_tcp_rtt_ms, host, port, 1)
+    if rtt is not None:
+        set_voice_rtt(rtt)
 
 
 # ── Events ────────────────────────────────────────────────────────────────────
@@ -227,6 +324,13 @@ async def on_ready():
             print(f"[Bot] Failed to generate default server reference WAV: {e}")
     _default_server_reference = str(default_ref_path)
 
+    # Stage 4: warm up GPU engine — triggers CUDA graph capture so the first
+    # real user message doesn't pay the ~38s one-time capture cost.
+    await loop.run_in_executor(
+        None, _warmup_gpu_engine, model,
+        _default_server_reference, config.default_language.title(),
+    )
+
     engine_ready.set()
     print("[Bot] All models ready.")
 
@@ -256,11 +360,16 @@ async def on_message(message: discord.Message):
         return
 
     if state.tts_queue is not None and not state.tts_queue.full():
+        import time as _time
         truncated = text[: state.settings.max_chars]
+        t_queued = _time.monotonic()
+        gateway_delay = (discord.utils.utcnow() - message.created_at).total_seconds()
         print(f"[{message.guild.name}] #{message.channel.name} | {message.author.display_name}: {truncated!r}")
-        await state.tts_queue.put(
-            TTSRequest(text=truncated, guild_id=message.guild.id, user_id=message.author.id)
-        )
+        print(f"[Latency] Discord gateway: {gateway_delay:.3f}s | queued at {t_queued:.3f}")
+        req = TTSRequest(text=truncated, guild_id=message.guild.id, user_id=message.author.id)
+        req._t_queued = t_queued
+        await state.tts_queue.put(req)
+        asyncio.create_task(_refresh_voice_rtt())
     elif state.tts_queue is not None and state.tts_queue.full():
         print(f"[{message.guild.name}] Queue full — dropped message from {message.author.display_name}")
 
@@ -526,6 +635,7 @@ class TTS(app_commands.Group, name="별코코", description="TTS 음성 컨트�
                     pass
             print(f"[{interaction.guild.name}] Joining voice channel: {channel.name} (requested by {interaction.user.display_name})")
             state.voice_client = await channel.connect(self_deaf=True)
+            asyncio.create_task(_log_voice_server_rtt(state.voice_client))
 
         await _ensure_guild_worker(state)
         print(f"[{interaction.guild.name}] Auto-read active on #{channel.name}")

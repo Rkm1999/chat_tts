@@ -5,12 +5,25 @@ Converts 24kHz mono float32 TTS audio to 48kHz stereo int16 PCM frames
 suitable for py-cord's AudioSource interface.
 """
 import queue as _queue
+import time as _time
 
 import numpy as np
 import discord
 
 
 DISCORD_FRAME_SIZE = 3840  # 20ms of 48kHz stereo int16 = 48000 * 0.02 * 2ch * 2bytes
+
+# Cached TCP RTT to the Discord voice server (ms), updated on each voice join and per-message.
+_voice_rtt_ms: float | None = None
+_voice_server_endpoint: tuple[str, int] | None = None  # (host, port)
+
+def set_voice_rtt(ms: float) -> None:
+    global _voice_rtt_ms
+    _voice_rtt_ms = ms
+
+def set_voice_endpoint(host: str, port: int) -> None:
+    global _voice_server_endpoint
+    _voice_server_endpoint = (host, port)
 SILENCE_LEAD_FRAMES = 0   # 40 ms — gives Discord time to process speaking state before audio
 
 
@@ -103,9 +116,17 @@ class StreamingAudioSource(discord.AudioSource):
             self._q.put(silence)
         self._volume = volume
         self._raw_tail = b""  # leftover bytes from a partial last frame
+        self._t_first_feed: float | None = None
+        self._first_read_logged: bool = False
+        try:
+            self._opus_encoder = discord.opus.Encoder()
+        except Exception:
+            self._opus_encoder = None
 
     def feed(self, audio: np.ndarray):
         """Called from chunk callback thread."""
+        if self._t_first_feed is None:
+            self._t_first_feed = _time.monotonic()
         frames = pcm_to_discord_frames(audio, volume=self._volume)
         for f in frames:
             self._q.put(f)
@@ -122,6 +143,20 @@ class StreamingAudioSource(discord.AudioSource):
             return b"\x00" * DISCORD_FRAME_SIZE  # still generating; keep connection alive
         if frame is None:
             return b""  # sentinel — done
+        if not self._first_read_logged and self._t_first_feed is not None:
+            feed_to_read = _time.monotonic() - self._t_first_feed
+            opus_ms = None
+            if self._opus_encoder is not None:
+                t_enc = _time.monotonic()
+                self._opus_encoder.encode(frame, 960)
+                opus_ms = (_time.monotonic() - t_enc) * 1000
+            rtt = _voice_rtt_ms
+            print(
+                f"[Latency] feed→AudioPlayer read: {feed_to_read:.4f}s"
+                + (f" | Opus encode: {opus_ms:.3f}ms" if opus_ms is not None else "")
+                + (f" | voice server RTT: {rtt:.1f}ms (~{rtt/2:.1f}ms one-way)" if rtt is not None else "")
+            )
+            self._first_read_logged = True
         return frame
 
     def is_opus(self) -> bool:
